@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 // Tetap pakai alias biar aman
 import 'package:google_sign_in/google_sign_in.dart' as google_auth; 
+import 'package:kasir_pintar_toti/features/home/home_page.dart'; // Import Home Page
 import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
 import 'register_page.dart';
@@ -25,7 +26,6 @@ class _LoginPageState extends State<LoginPage> {
   // --- FUNGSI LOGIN EMAIL ---
   Future<void> login() async {
     if (!_formKey.currentState!.validate()) return;
-    // Mulai Loading Full Screen
     setState(() => isLoading = true);
 
     try {
@@ -33,6 +33,14 @@ class _LoginPageState extends State<LoginPage> {
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
+
+      // JIKA SUKSES -> PINDAH KE HOME (Anti-Back)
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       String message = "Login Gagal.";
       if (e.code == 'user-not-found') message = "Email belum terdaftar.";
@@ -44,7 +52,6 @@ class _LoginPageState extends State<LoginPage> {
         showTopSnackBar(Overlay.of(context), CustomSnackBar.error(message: message));
       }
     } finally {
-      // Stop Loading (Kalau sukses dia pindah halaman, kalau gagal dia stop loading)
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -63,14 +70,30 @@ class _LoginPageState extends State<LoginPage> {
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
+      
+      // Login ke Firebase
       await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // JIKA SUKSES -> PINDAH KE HOME
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
+
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         showTopSnackBar(Overlay.of(context), CustomSnackBar.error(message: e.message ?? "Gagal Login Google"));
       }
     } catch (e) {
       if (mounted) {
-        showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "Terjadi kesalahan sistem (Cek koneksi internet)"));
+        // Cek apakah errornya karena Windows (MissingPlugin) atau Internet
+        if (e.toString().contains("MissingPluginException")) {
+             showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "Login Google belum support di Windows Desktop. Gunakan Email/Pass."));
+        } else {
+             showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "Terjadi kesalahan sistem (Cek koneksi internet)"));
+        }
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
@@ -79,7 +102,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Kita bungkus semuanya dengan STACK agar bisa menaruh Loading di lapisan paling atas
     return Scaffold(
       body: Stack(
         children: [
@@ -88,7 +110,6 @@ class _LoginPageState extends State<LoginPage> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: Container(
-                // Tambahan: Membatasi lebar agar di Windows Fullscreen tidak terlalu lebar
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Form(
                   key: _formKey,
@@ -110,7 +131,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 40),
                       
-                      // Input Email Modern
+                      // Input Email
                       TextFormField(
                         controller: emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -118,15 +139,15 @@ class _LoginPageState extends State<LoginPage> {
                           labelText: "Email",
                           prefixIcon: const Icon(Icons.email_outlined),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          filled: true, // Ada warna background
+                          filled: true, 
                           fillColor: Colors.grey.shade50,
-                          enabled: !isLoading, // Matikan input saat loading
+                          enabled: !isLoading, 
                         ),
                         validator: (value) => (value == null || !value.contains('@')) ? "Email tidak valid" : null,
                       ),
                       const SizedBox(height: 16),
                       
-                      // Input Password Modern
+                      // Input Password
                       TextFormField(
                         controller: passwordController,
                         obscureText: isObscure,
@@ -146,14 +167,13 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Tombol Masuk dengan Hover Effect
+                      // Tombol Masuk
                       SizedBox(
-                        height: 50, // Tombol lebih tinggi biar gagah
+                        height: 50, 
                         child: ElevatedButton(
                           onPressed: isLoading ? null : login,
                           style: ButtonStyle(
                             backgroundColor: WidgetStateProperty.resolveWith((states) {
-                              // Ganti warna saat di-hover mouse (Fitur Windows)
                               if (states.contains(WidgetState.hovered)) return Colors.blue.shade800;
                               if (states.contains(WidgetState.disabled)) return Colors.grey;
                               return Colors.blue;
@@ -161,7 +181,7 @@ class _LoginPageState extends State<LoginPage> {
                             foregroundColor: WidgetStateProperty.all(Colors.white),
                             shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                             elevation: WidgetStateProperty.resolveWith((states) {
-                              if (states.contains(WidgetState.hovered)) return 6; // Bayangan naik saat hover
+                              if (states.contains(WidgetState.hovered)) return 6; 
                               return 2;
                             }),
                           ),
@@ -173,14 +193,13 @@ class _LoginPageState extends State<LoginPage> {
                       const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text("ATAU", style: TextStyle(color: Colors.grey, fontSize: 12))), Expanded(child: Divider())]),
                       const SizedBox(height: 24),
 
-                      // Tombol Google dengan Hover Effect & GAMBAR PNG
+                      // Tombol Google
                       SizedBox(
                         height: 50,
                         child: OutlinedButton(
                           onPressed: isLoading ? null : signInWithGoogle,
                           style: ButtonStyle(
                             backgroundColor: WidgetStateProperty.resolveWith((states) {
-                              // Efek background tipis saat hover
                               if (states.contains(WidgetState.hovered)) return Colors.blue.shade50;
                               return Colors.transparent;
                             }),
@@ -190,7 +209,6 @@ class _LoginPageState extends State<LoginPage> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // PENTING: Link PNG agar tidak crash
                               Image.network('https://freesvg.org/img/1534129544.png', height: 24),
                               const SizedBox(width: 12),
                               const Text("Masuk dengan Google", style: TextStyle(fontSize: 16, color: Colors.black87)),
@@ -211,16 +229,15 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
 
-          // 2. LAPISAN DEPAN (LOADING OVERLAY)
-          // Ini yang bikin efek "Loading Scene"
+          // 2. LAPISAN DEPAN (LOADING)
           if (isLoading)
             Container(
-              color: Colors.black.withOpacity(0.5), // Layar jadi gelap transparan
+              color: Colors.black.withOpacity(0.5), 
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: Colors.white), // Spinner Putih
+                    CircularProgressIndicator(color: Colors.white), 
                     SizedBox(height: 20),
                     Text(
                       "Sedang Memproses...",
