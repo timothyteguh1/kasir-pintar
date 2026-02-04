@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "748610989842",
+    "project_id": "kasir-toti-2026-b6ce0",
+    "storage_bucket": "kasir-toti-2026-b6ce0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:748610989842:android:f128ce37361785cf000dcb",
+        "android_client_info": {
+          "package_name": "com.example.kasir_pintar_toti"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADggdtmFhVwgqKRjula7gvzg8H0jH6zQ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
