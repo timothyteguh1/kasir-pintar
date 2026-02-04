@@ -224,7 +224,7 @@ class _LoginPageState extends State<LoginPage> {
                     SizedBox(height: 20),
                     Text(
                       "Sedang Memproses...",
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
                     )
                   ],
                 ),
