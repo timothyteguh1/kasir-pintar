@@ -45,6 +45,7 @@ dependencies:
   mobile_scanner: ^7.1.4
   top_snackbar_flutter: ^3.3.0
   google_sign_in: ^6.2.1
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:

@@ -1,8 +1,15 @@
+import 'dart:convert'; // Wajib: Ubah Gambar ke Teks
+import 'dart:io';
+import 'dart:typed_data'; // Wajib: Olah data gambar
+import 'package:cloud_firestore/cloud_firestore.dart'; // Wajib: Database
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart'; // Wajib: Ambil gambar
 import 'package:kasir_pintar_toti/features/auth/login_page.dart';
 import 'package:kasir_pintar_toti/features/products/add_product_page.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:top_snackbar_flutter/custom_snack_bar.dart';
+import 'package:top_snackbar_flutter/top_snack_bar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,22 +20,95 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final user = FirebaseAuth.instance.currentUser;
+  
+  // --- STATE UNTUK FOTO PROFIL ---
+  bool isUploading = false;
+  Uint8List? photoBytes; // Variabel penampung foto dari database
 
-  // --- FUNGSI LOGOUT (SUDAH DIPERBAIKI) ---
-  // Aman untuk Windows & Android
+  @override
+  void initState() {
+    super.initState();
+    // Saat aplikasi mulai, langsung cek database apakah user punya foto custom?
+    _loadProfilePicture();
+  }
+
+  // 1. FUNGSI LOAD FOTO DARI DATABASE (Firestore)
+  Future<void> _loadProfilePicture() async {
+    if (user == null) return;
+    
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
+      
+      // Jika ada data 'photo_base64', kita ambil dan ubah jadi gambar
+      if (doc.exists && doc.data()!.containsKey('photo_base64')) {
+        String base64String = doc.get('photo_base64');
+        setState(() {
+          photoBytes = base64Decode(base64String);
+        });
+      }
+    } catch (e) {
+      debugPrint("Gagal load foto: $e");
+    }
+  }
+
+  // 2. FUNGSI UPLOAD FOTO (Kompres & Simpan ke Database)
+  Future<void> changeProfilePicture() async {
+    final picker = ImagePicker();
+    
+    // Pilih gambar & KOMPRES JADI KECIL (Quality 20 biar muat di DB Gratisan)
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 20, // Kualitas diturunkan jadi 20%
+      maxWidth: 512,    // Lebar diperkecil
+    );
+    
+    if (pickedFile == null) return;
+
+    setState(() => isUploading = true);
+
+    try {
+      // Baca file jadi bytes
+      final bytes = await File(pickedFile.path).readAsBytes();
+      
+      // Ubah jadi Teks Panjang (Base64)
+      String base64Image = base64Encode(bytes);
+
+      // Simpan ke Firestore Database (Gratis, tidak butuh Storage Billing)
+      await FirebaseFirestore.instance.collection('users').doc(user!.uid).set({
+        'email': user!.email,
+        'name': user!.displayName,
+        'photo_base64': base64Image, // Ini fotonya disimpan sebagai teks
+        'last_updated': DateTime.now().toString(),
+      }, SetOptions(merge: true));
+
+      // Tampilkan langsung di layar
+      setState(() {
+        photoBytes = bytes;
+      });
+
+      if (mounted) {
+        showTopSnackBar(Overlay.of(context), const CustomSnackBar.success(message: "Foto Profil Berhasil Disimpan!"));
+      }
+
+    } catch (e) {
+      if (mounted) {
+        showTopSnackBar(Overlay.of(context), CustomSnackBar.error(message: "Gagal Simpan: $e"));
+      }
+    } finally {
+      setState(() => isUploading = false);
+    }
+  }
+
+  // --- FUNGSI LOGOUT ---
   Future<void> logout() async {
-    // 1. Coba Logout Google (Khusus Mobile)
     try {
       await GoogleSignIn().signOut();
     } catch (e) {
-      // Jika error (misal di Windows), kita abaikan saja & lanjut logout Firebase
       debugPrint("Google Logout dilewati: $e");
     }
-
-    // 2. Logout Firebase (Wajib)
+    
     await FirebaseAuth.instance.signOut();
-
-    // 3. Pindah ke Halaman Login
+    
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -38,7 +118,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Widget Helper untuk Membuat Item Menu (Grid)
+  // Widget Helper Menu Grid
   Widget _buildMenuItem(String title, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
@@ -77,11 +157,11 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Background abu muda bersih
-
-      // HEADER BIRU
+      backgroundColor: Colors.grey[50], 
+      
+      // APP BAR
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E88E5), // Biru POS
+        backgroundColor: const Color(0xFF1E88E5), 
         elevation: 0,
         title: const Text("Kasir Toti PRO", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         actions: [
@@ -90,7 +170,7 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.notifications_outlined, color: Colors.white),
           ),
           IconButton(
-            onPressed: logout, // Panggil fungsi logout yang sudah diperbaiki
+            onPressed: logout,
             icon: const Icon(Icons.logout, color: Colors.white),
             tooltip: "Keluar Aplikasi",
           ),
@@ -100,7 +180,7 @@ class _HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // BAGIAN DASHBOARD (Header Melengkung)
+            // HEADER BIRU
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
@@ -113,15 +193,45 @@ class _HomePageState extends State<HomePage> {
               ),
               child: Column(
                 children: [
-                  // Profil Singkat
+                  // --- PROFIL USER (LOGIKA BASE64 + UI LAMA) ---
                   Row(
                     children: [
-                      CircleAvatar(
-                        backgroundImage: NetworkImage(user?.photoURL ?? "https://i.pravatar.cc/150"),
-                        radius: 20,
-                        backgroundColor: Colors.white,
+                      GestureDetector(
+                        onTap: isUploading ? null : changeProfilePicture, // Bisa diklik
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.white,
+                              // Logika Tampilan:
+                              // 1. Cek photoBytes (dari database) -> Prioritas Utama
+                              // 2. Cek photoURL (dari Google Login)
+                              // 3. Pakai Default (Kartun)
+                              backgroundImage: photoBytes != null
+                                  ? MemoryImage(photoBytes!) as ImageProvider
+                                  : NetworkImage(
+                                      (user?.photoURL != null && user!.photoURL!.isNotEmpty)
+                                          ? user!.photoURL!
+                                          : "https://i.pravatar.cc/150", 
+                                    ),
+                              child: isUploading 
+                                ? const CircularProgressIndicator(strokeWidth: 2) 
+                                : null,
+                            ),
+                            // Ikon Kamera Kecil
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                child: const Icon(Icons.camera_alt, size: 14, color: Colors.blue),
+                              ),
+                            )
+                          ],
+                        ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -139,7 +249,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 20),
 
-                  // CARD RINGKASAN (Omzet & Piutang)
+                  // KARTU RINGKASAN
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -150,12 +260,11 @@ class _HomePageState extends State<HomePage> {
                     ),
                     child: Column(
                       children: [
-                        // Header Kuning (Judul)
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
                           decoration: const BoxDecoration(
-                            color: Color(0xFFFF9800), // Oranye Cerah
+                            color: Color(0xFFFF9800), 
                             borderRadius: BorderRadius.only(topLeft: Radius.circular(15), topRight: Radius.circular(15)),
                           ),
                           child: const Row(
@@ -166,14 +275,11 @@ class _HomePageState extends State<HomePage> {
                             ],
                           ),
                         ),
-
-                        // Isi Data (Omzet & Transaksi)
                         Padding(
                           padding: const EdgeInsets.all(15),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // Total Omzet
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -185,9 +291,7 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 ],
                               ),
-                              // Garis Tengah
                               Container(height: 40, width: 1, color: Colors.grey[300]),
-                              // Jumlah Transaksi
                               const Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
@@ -202,15 +306,12 @@ class _HomePageState extends State<HomePage> {
                             ],
                           ),
                         ),
-
-                        // Footer Merah (Piutang) - BISA DIKLIK
                         Material(
-                          color: Colors.red[50], // Background merah muda
+                          color: Colors.red[50],
                           borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(15), bottomRight: Radius.circular(15)),
                           child: InkWell(
                             borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(15), bottomRight: Radius.circular(15)),
                             onTap: () {
-                              // Aksi saat diklik
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text("Menu Piutang Segera Hadir!")),
                               );
@@ -240,7 +341,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-            // MENU GRID ICON
+            // MENU GRID
             Padding(
               padding: const EdgeInsets.all(20),
               child: GridView.count(
@@ -255,7 +356,7 @@ class _HomePageState extends State<HomePage> {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Menu Kasir Segera Hadir!")));
                   }),
                   _buildMenuItem("Produk", Icons.inventory_2, Colors.orange, () {
-                    // Navigasi ke Halaman Tambah Produk
+                    // Navigasi ke Halaman Tambah Produk (TETAP ADA)
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const AddProductPage()));
                   }),
                   _buildMenuItem("Laporan", Icons.bar_chart, Colors.purple, () {}),
@@ -283,7 +384,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               IconButton(icon: const Icon(Icons.home, color: Colors.blue), onPressed: () {}),
               IconButton(icon: const Icon(Icons.receipt_long, color: Colors.grey), onPressed: () {}),
-              const SizedBox(width: 48), // Spasi untuk tombol tengah
+              const SizedBox(width: 48), 
               IconButton(icon: const Icon(Icons.wallet, color: Colors.grey), onPressed: () {}),
               IconButton(icon: const Icon(Icons.person, color: Colors.grey), onPressed: () {}),
             ],
