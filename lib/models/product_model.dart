@@ -5,12 +5,14 @@ class ProductModel {
   final String name;
   final String barcode;
   final String category;
-  final int price; // Harga Jual
-  final int costPrice; // Harga Modal (Penting buat laporan laba)
+  final int price;      // Harga Jual
+  final int costPrice;  // Harga Modal
   final int stock;
+  final int minStock;   // BARU: Batas Stok Minimum (untuk Alert)
+  final String unit;    // BARU: Satuan (Pcs, Kg, Dus, dll)
   final String? imageUrl;
   final DateTime createdAt;
-  final List<String> searchKeywords; // Trik untuk pencarian
+  final List<String> searchKeywords; 
 
   ProductModel({
     required this.id,
@@ -20,12 +22,13 @@ class ProductModel {
     required this.price,
     required this.costPrice,
     required this.stock,
+    required this.minStock, // Wajib diisi
+    required this.unit,     // Wajib diisi
     this.imageUrl,
     required this.createdAt,
     required this.searchKeywords,
   });
 
-  // 1. Ubah DATA dari Firebase (Map) menjadi Class Dart
   factory ProductModel.fromSnapshot(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return ProductModel(
@@ -36,13 +39,16 @@ class ProductModel {
       price: data['price'] ?? 0,
       costPrice: data['cost_price'] ?? 0,
       stock: data['stock'] ?? 0,
+      // Default ke 5 jika data lama belum punya min_stock
+      minStock: data['min_stock'] ?? 5, 
+      // Default ke 'Pcs' jika data lama belum punya unit
+      unit: data['unit'] ?? 'Pcs',
       imageUrl: data['image_url'],
       createdAt: (data['created_at'] as Timestamp).toDate(),
       searchKeywords: List<String>.from(data['search_keywords'] ?? []),
     );
   }
 
-  // 2. Ubah Class Dart menjadi JSON (Map) untuk dikirim ke Firebase
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -51,6 +57,8 @@ class ProductModel {
       'price': price,
       'cost_price': costPrice,
       'stock': stock,
+      'min_stock': minStock, // Simpan ke DB
+      'unit': unit,          // Simpan ke DB
       'image_url': imageUrl,
       'created_at': Timestamp.fromDate(createdAt),
       'search_keywords': searchKeywords,
