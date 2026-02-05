@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:convert'; // PENTING: Untuk Encode/Decode Base64
 import 'dart:io';
 import 'dart:typed_data'; // PENTING: Tipe data bytes
@@ -114,15 +116,23 @@ class _AddProductPageState extends State<AddProductPage> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery, 
-      imageQuality: 25, // Kualitas rendah agar size kecil (Wajib untuk Firestore)
-      maxWidth: 512, 
+      imageQuality: 20, // Bisa diturunkan ke 20 jika masih terlalu besar
+      maxWidth: 400,    // Ukuran 400px sudah cukup untuk ikon produk
     );
     
     if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-        _decodedBytes = null; // Hapus preview lama jika ada foto baru
-      });
+      File file = File(pickedFile.path);
+      int sizeInBytes = file.lengthSync();
+      double sizeInMb = sizeInBytes / (1024 * 1024);
+
+      if (sizeInMb > 0.8) {
+        debugPrint("Gambar masih terlalu besar!");
+      } else {
+        setState(() {
+          _imageFile = file;
+          _decodedBytes = null; // Reset decode bytes agar menampilkan file baru
+        });
+      }
     }
   }
 
@@ -207,13 +217,13 @@ class _AddProductPageState extends State<AddProductPage> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            // --- UI GAMBAR (Logic Updated for Base64) ---
+            // --- UI GAMBAR ---
             Center(
               child: GestureDetector(
                 onTap: _pickImage,
                 child: Container(
-                  width: 120,
                   height: 120,
+                  width: 120,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -239,7 +249,6 @@ class _AddProductPageState extends State<AddProductPage> {
             ),
             const SizedBox(height: 24),
             
-            // ... Form fields lainnya SAMA PERSIS dengan GitHub ...
             const Text("Informasi Dasar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             
@@ -319,9 +328,7 @@ class _AddProductPageState extends State<AddProductPage> {
                     }
                   ),
                 ),
-                
                 const SizedBox(width: 16),
-                
                 Expanded(
                   child: TextFormField(
                     controller: barcodeController,
@@ -398,16 +405,18 @@ class _AddProductPageState extends State<AddProductPage> {
                 Expanded(
                   flex: 1,
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true, // PERBAIKAN OVERFLOW
                     value: selectedUnit,
                     decoration: const InputDecoration(
                       labelText: "Satuan",
                       border: OutlineInputBorder(),
                       filled: true, fillColor: Colors.white,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10), // PERBAIKAN OVERFLOW
                     ),
                     items: unitOptions.map((String unit) {
                       return DropdownMenuItem<String>(
                         value: unit,
-                        child: Text(unit),
+                        child: Text(unit, overflow: TextOverflow.ellipsis), // PERBAIKAN OVERFLOW
                       );
                     }).toList(),
                     onChanged: (String? newValue) {

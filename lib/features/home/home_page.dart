@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart'; // Wajib: Ambil gambar
 import 'package:kasir_pintar_toti/features/auth/login_page.dart';
 // ignore: unused_import
 import 'package:kasir_pintar_toti/features/products/product_list_page.dart'; // Wajib: Halaman List Produk
+import 'package:kasir_pintar_toti/features/reports/sales_report_page.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
@@ -485,12 +486,15 @@ class _HomePageState extends State<HomePage> {
                       });
                     },
                   ),
-                  _buildMenuItem(
-                    "Laporan",
-                    Icons.bar_chart,
-                    Colors.purple,
-                    () {},
-                  ),
+                  _buildMenuItem("Laporan", Icons.bar_chart, Colors.purple, () {
+                    setState(() {
+                      _activePage = SalesReportPage(
+                        onBack: () {
+                          setState(() => _activePage = null);
+                        },
+                      );
+                    });
+                  }),
                   _buildMenuItem("Riwayat", Icons.history, Colors.green, () {}),
                   _buildMenuItem("Pelanggan", Icons.people, Colors.teal, () {}),
                   _buildMenuItem(
