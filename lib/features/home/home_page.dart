@@ -6,11 +6,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; // Wajib: Ambil gambar
 import 'package:kasir_pintar_toti/features/auth/login_page.dart';
+// ignore: unused_import
 import 'package:kasir_pintar_toti/features/products/product_list_page.dart'; // Wajib: Halaman List Produk
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
 import 'package:kasir_pintar_toti/features/master/master_data_page.dart';
+import 'package:kasir_pintar_toti/features/pos/pos_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -460,9 +462,13 @@ class _HomePageState extends State<HomePage> {
                 childAspectRatio: 0.7,
                 children: [
                   _buildMenuItem("Kasir", Icons.point_of_sale, Colors.blue, () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Menu Kasir Segera Hadir!")),
-                    );
+                    setState(() {
+                      _activePage = PosPage(
+                        onBack: () {
+                          setState(() => _activePage = null);
+                        },
+                      );
+                    });
                   }),
                   _buildMenuItem(
                     "Produk",
@@ -538,10 +544,14 @@ class _HomePageState extends State<HomePage> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Nanti kita arahkan ke halaman Kasir
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Akan diarahkan ke Kasir")),
-          );
+          // Masuk ke Halaman Kasir
+          setState(() {
+            _activePage = PosPage(
+              onBack: () {
+                setState(() => _activePage = null); // Kembali ke Home
+              },
+            );
+          });
         },
         backgroundColor: const Color(0xFF1E88E5),
         elevation: 4,
