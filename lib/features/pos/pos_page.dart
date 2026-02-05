@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, use_build_context_synchronously, unused_element, prefer_final_fields, avoid_types_as_parameter_names
+
 import 'dart:convert'; // WAJIB ADA: Untuk decode Base64
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -205,6 +207,7 @@ class _PosPageState extends State<PosPage> {
           ),
           child: InkWell(
             onTap: () => _addToCart(product),
+  
             splashColor: Colors.blue.withOpacity(0.2),
             highlightColor: Colors.blue.withOpacity(0.1),
             child: Column(
