@@ -1,3 +1,4 @@
+import 'dart:convert'; // WAJIB: Untuk decode Base64
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -33,6 +34,16 @@ class _ProductListPageState extends State<ProductListPage> {
           .orderBy('created_at', descending: true)
           .get();
     });
+  }
+
+  // --- HELPER BASE64 IMAGE ---
+  ImageProvider? _getImageProvider(String? imageString) {
+    if (imageString == null || imageString.isEmpty) return null;
+    try {
+      return MemoryImage(base64Decode(imageString));
+    } catch (e) {
+      return null;
+    }
   }
 
   String formatRupiah(int number) {
@@ -189,8 +200,8 @@ class _ProductListPageState extends State<ProductListPage> {
                     itemCount: allProducts.length,
                     itemBuilder: (context, index) {
                       final product = allProducts[index];
-                      final int profit = product.price - product.costPrice;
-                      // LOGIKA BARU: Peringatan berdasarkan settingan per barang
+                      // Ambil Image Provider
+                      final imageProvider = _getImageProvider(product.imageUrl);
                       final bool isLowStock = product.stock <= product.minStock;
 
                       return Card(
@@ -204,18 +215,27 @@ class _ProductListPageState extends State<ProductListPage> {
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // ICON DINAMIS
+                                  // --- ICON / GAMBAR PRODUK (UPDATED) ---
                                   Container(
                                     width: 60, height: 60,
                                     decoration: BoxDecoration(
                                       color: isLowStock ? Colors.red.shade50 : Colors.blue.shade50,
                                       borderRadius: BorderRadius.circular(10),
+                                      border: isLowStock ? Border.all(color: Colors.red.shade200) : null, // Border merah jika stok dikit
+                                      image: imageProvider != null 
+                                          ? DecorationImage(
+                                              image: imageProvider,
+                                              fit: BoxFit.cover,
+                                            ) 
+                                          : null,
                                     ),
-                                    child: Icon(
-                                      isLowStock ? Icons.warning_amber_rounded : Icons.inventory_2, 
-                                      color: isLowStock ? Colors.red : Colors.blue,
-                                      size: 30
-                                    ),
+                                    child: imageProvider == null 
+                                        ? Icon(
+                                            isLowStock ? Icons.warning_amber_rounded : Icons.inventory_2, 
+                                            color: isLowStock ? Colors.red : Colors.blue,
+                                            size: 30
+                                          )
+                                        : null,
                                   ),
                                   const SizedBox(width: 12),
                                   
@@ -262,7 +282,6 @@ class _ProductListPageState extends State<ProductListPage> {
                                               crossAxisAlignment: CrossAxisAlignment.end,
                                               children: [
                                                 const Text("Stok", style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                                // TAMPILKAN SATUAN (UNIT)
                                                 Text(
                                                   "${product.stock} ${product.unit}", 
                                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isLowStock ? Colors.red : Colors.black)
@@ -284,7 +303,7 @@ class _ProductListPageState extends State<ProductListPage> {
                                     children: [
                                       const Icon(Icons.trending_up, size: 16, color: Colors.green),
                                       const SizedBox(width: 4),
-                                      Text("Laba: ${formatRupiah(profit)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                                      Text("Laba: ${formatRupiah(product.price - product.costPrice)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
                                     ],
                                   ),
                                   

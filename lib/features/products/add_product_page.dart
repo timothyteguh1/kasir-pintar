@@ -1,5 +1,9 @@
+import 'dart:convert'; // PENTING: Untuk Encode/Decode Base64
+import 'dart:io';
+import 'dart:typed_data'; // PENTING: Tipe data bytes
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:kasir_pintar_toti/models/product_model.dart';
 import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
@@ -33,10 +37,15 @@ class _AddProductPageState extends State<AddProductPage> {
   bool isLoading = false;
   List<String> _categoryOptions = [];
 
+  // --- STATE GAMBAR (BASE64) ---
+  File? _imageFile;
+  String? _currentImageBase64; // Simpan string Base64 lama
+  Uint8List? _decodedBytes; // Untuk preview gambar lama
+
   @override
   void initState() {
     super.initState();
-    _fetchCategoriesFromMaster(); // Ubah sumber datanya
+    _fetchCategoriesFromMaster();
 
     if (widget.productToEdit != null) {
       final p = widget.productToEdit!;
@@ -48,15 +57,24 @@ class _AddProductPageState extends State<AddProductPage> {
       stockController.text = p.stock.toString();
       minStockController.text = p.minStock.toString();
       selectedUnit = unitOptions.contains(p.unit) ? p.unit : 'Pcs';
+      
+      // LOGIKA EDIT: Load gambar dari Base64 string
+      if (p.imageUrl != null && p.imageUrl!.isNotEmpty) {
+        _currentImageBase64 = p.imageUrl;
+        try {
+          _decodedBytes = base64Decode(p.imageUrl!);
+        } catch (e) {
+          debugPrint("Gagal decode gambar lama: $e");
+        }
+      }
     }
   }
 
-  // UPDATE 1: Ambil data dari koleksi 'categories' (Master Data) agar Cepat & Ringan
+  // UPDATE 1: Ambil data dari koleksi 'categories' (Master Data)
   Future<void> _fetchCategoriesFromMaster() async {
     try {
       final snapshot = await FirebaseFirestore.instance.collection('categories').get();
       final List<String> categories = snapshot.docs.map((doc) => doc['name'].toString()).toList();
-      
       setState(() {
         _categoryOptions = categories..sort();
       });
@@ -67,17 +85,13 @@ class _AddProductPageState extends State<AddProductPage> {
 
   // Fungsi Cek & Simpan Kategori Baru ke Master
   Future<void> _syncCategoryToMaster(String newCategory) async {
-    // Cek apakah kategori ini sudah ada di list master kita?
-    // Kita pakai toLowerCase() biar "Minuman" dan "minuman" dianggap sama
     bool exists = _categoryOptions.any((c) => c.toLowerCase() == newCategory.toLowerCase());
-
     if (!exists && newCategory.isNotEmpty) {
       try {
         await FirebaseFirestore.instance.collection('categories').add({
-          'name': newCategory, // Simpan nama aslinya (format kapital user)
+          'name': newCategory,
           'created_at': DateTime.now(),
         });
-        debugPrint("Auto-Sync: Kategori '$newCategory' ditambahkan ke Master.");
       } catch (e) {
         debugPrint("Gagal auto-sync kategori: $e");
       }
@@ -91,10 +105,41 @@ class _AddProductPageState extends State<AddProductPage> {
       temp = temp + name[i].toLowerCase();
       keywords.add(temp);
     }
-    if (barcode.isNotEmpty) {
-      keywords.add(barcode.toLowerCase());
-    }
+    if (barcode.isNotEmpty) keywords.add(barcode.toLowerCase());
     return keywords;
+  }
+
+  // --- 1. FUNGSI AMBIL FOTO (Kompresi Kuat agar muat di Firestore) ---
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery, 
+      imageQuality: 25, // Kualitas rendah agar size kecil (Wajib untuk Firestore)
+      maxWidth: 512, 
+    );
+    
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+        _decodedBytes = null; // Hapus preview lama jika ada foto baru
+      });
+    }
+  }
+
+  // --- 2. PROSES GAMBAR KE BASE64 ---
+  Future<String?> _processImageToBase64() async {
+    // A. Jika user pilih foto baru -> Convert ke Base64
+    if (_imageFile != null) {
+      try {
+        final bytes = await _imageFile!.readAsBytes();
+        return base64Encode(bytes);
+      } catch (e) {
+        debugPrint("Gagal convert gambar: $e");
+        return null;
+      }
+    }
+    // B. Jika tidak ada foto baru -> Pakai data lama
+    return _currentImageBase64;
   }
 
   Future<void> saveProduct() async {
@@ -103,17 +148,16 @@ class _AddProductPageState extends State<AddProductPage> {
     setState(() => isLoading = true);
 
     try {
-      // 1. Pastikan kategori terisi
       final finalCategory = selectedCategory.isEmpty ? 'Umum' : selectedCategory;
-
-      // UPDATE 2: Jalankan Auto-Sync ke Master Kategori
       await _syncCategoryToMaster(finalCategory);
 
-      // 3. Lanjut Simpan Produk seperti biasa
       final bool isEditing = widget.productToEdit != null;
       final docRef = isEditing 
           ? FirebaseFirestore.instance.collection('products').doc(widget.productToEdit!.id)
           : FirebaseFirestore.instance.collection('products').doc();
+
+      // Dapatkan String Base64 (bukan URL Storage)
+      String? imageBase64 = await _processImageToBase64();
 
       final product = ProductModel(
         id: docRef.id,
@@ -125,6 +169,7 @@ class _AddProductPageState extends State<AddProductPage> {
         stock: int.parse(stockController.text.isEmpty ? '0' : stockController.text),
         minStock: int.parse(minStockController.text.isEmpty ? '5' : minStockController.text),
         unit: selectedUnit,
+        imageUrl: imageBase64, // Simpan string panjang ini ke Firestore
         createdAt: isEditing ? widget.productToEdit!.createdAt : DateTime.now(),
         searchKeywords: generateSearchKeywords(nameController.text, barcodeController.text),
       );
@@ -162,6 +207,39 @@ class _AddProductPageState extends State<AddProductPage> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            // --- UI GAMBAR (Logic Updated for Base64) ---
+            Center(
+              child: GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                    image: _imageFile != null
+                        ? DecorationImage(image: FileImage(_imageFile!), fit: BoxFit.cover)
+                        : (_decodedBytes != null 
+                            ? DecorationImage(image: MemoryImage(_decodedBytes!), fit: BoxFit.cover)
+                            : null),
+                  ),
+                  child: (_imageFile == null && _decodedBytes == null)
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_a_photo, color: Colors.grey[400], size: 40),
+                            const SizedBox(height: 4),
+                            Text("Foto", style: TextStyle(color: Colors.grey[400])),
+                          ],
+                        )
+                      : null,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // ... Form fields lainnya SAMA PERSIS dengan GitHub ...
             const Text("Informasi Dasar", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             
@@ -199,7 +277,6 @@ class _AddProductPageState extends State<AddProductPage> {
                           textEditingController.addListener(() {
                             selectedCategory = textEditingController.text;
                           });
-                          
                           return TextFormField(
                             controller: textEditingController,
                             focusNode: focusNode,

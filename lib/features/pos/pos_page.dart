@@ -1,3 +1,4 @@
+import 'dart:convert'; // WAJIB ADA: Untuk decode Base64
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +7,7 @@ import 'package:kasir_pintar_toti/models/product_model.dart';
 import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
 import 'package:kasir_pintar_toti/features/pos/checkout_page.dart';
-import 'package:kasir_pintar_toti/features/pos/invoice_page.dart'; // Import Invoice Page
+import 'package:kasir_pintar_toti/features/pos/invoice_page.dart';
 
 class PosPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -36,7 +37,6 @@ class _PosPageState extends State<PosPage> {
   // Ambil Data Produk & Kategori Sekaligus
   Future<void> _fetchData() async {
     try {
-      // 1. Ambil Produk
       final productSnap = await FirebaseFirestore.instance
           .collection('products')
           .orderBy('name')
@@ -45,7 +45,6 @@ class _PosPageState extends State<PosPage> {
           .map((doc) => ProductModel.fromSnapshot(doc))
           .toList();
 
-      // 2. Ambil Kategori (Unik)
       final categorySnap = await FirebaseFirestore.instance
           .collection('categories')
           .get();
@@ -53,7 +52,7 @@ class _PosPageState extends State<PosPage> {
           .map((doc) => doc['name'].toString())
           .toList();
       categories.sort();
-      categories.insert(0, "Semua"); // Tambah opsi 'Semua' di awal
+      categories.insert(0, "Semua");
 
       setState(() {
         _allProducts = products;
@@ -66,7 +65,6 @@ class _PosPageState extends State<PosPage> {
 
   // --- LOGIKA KERANJANG ---
 
-  // Tambah Barang ke Keranjang
   void _addToCart(ProductModel product) {
     // Cek Stok Dulu
     if (product.stock <= 0) {
@@ -78,7 +76,6 @@ class _PosPageState extends State<PosPage> {
     }
 
     setState(() {
-      // Cek apakah barang sudah ada di keranjang?
       final index = _cart.indexWhere((item) => item.product.id == product.id);
 
       if (index != -1) {
@@ -98,7 +95,6 @@ class _PosPageState extends State<PosPage> {
     });
   }
 
-  // Kurangi Qty
   void _decreaseQty(int index) {
     setState(() {
       if (_cart[index].qty > 1) {
@@ -109,23 +105,32 @@ class _PosPageState extends State<PosPage> {
     });
   }
 
-  // Hapus Item
   void _removeFromCart(int index) {
     setState(() {
       _cart.removeAt(index);
     });
   }
 
-  // Hitung Total Belanja
   int get _totalPrice => _cart.fold(0, (sum, item) => sum + item.subtotal);
 
-  // Format Rupiah
   String formatRupiah(int number) {
     return NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'Rp ',
       decimalDigits: 0,
     ).format(number);
+  }
+
+  // --- HELPER UNTUK GAMBAR (BASE64) ---
+  ImageProvider? _getImageProvider(String? imageString) {
+    if (imageString == null || imageString.isEmpty) return null;
+    try {
+      // Decode Base64 string ke bytes agar bisa ditampilkan
+      return MemoryImage(base64Decode(imageString));
+    } catch (e) {
+      debugPrint("Error decoding base64 image: $e");
+      return null;
+    }
   }
 
   // --- UI BUILDING BLOCKS ---
@@ -160,7 +165,7 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
-  // 2. Widget Grid Produk
+  // 2. Widget Grid Produk (UPDATED: Menampilkan Gambar Base64)
   Widget _buildProductGrid() {
     // Filter List
     final filteredProducts = _allProducts.where((p) {
@@ -179,8 +184,8 @@ class _PosPageState extends State<PosPage> {
     return GridView.builder(
       padding: const EdgeInsets.only(bottom: 80),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 200, // Lebar maksimal kartu
-        childAspectRatio: 0.75, // Perbandingan Tinggi:Lebar
+        maxCrossAxisExtent: 200,
+        childAspectRatio: 0.75,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
       ),
@@ -189,44 +194,70 @@ class _PosPageState extends State<PosPage> {
         final product = filteredProducts[index];
         final bool isOOS = product.stock <= 0;
 
+        // Ambil Provider Gambar dari String Base64 (bukan URL)
+        final ImageProvider? imageProvider = _getImageProvider(product.imageUrl);
+
         return Card(
           elevation: 2,
-          clipBehavior: Clip.antiAlias, // PENTING: Agar efek klik tidak keluar kotak
+          clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          // UPDATE: Ganti GestureDetector dengan InkWell untuk efek Ripple/Klik
           child: InkWell(
             onTap: () => _addToCart(product),
-            splashColor: Colors.blue.withOpacity(0.2), // Efek air biru muda
+            splashColor: Colors.blue.withOpacity(0.2),
             highlightColor: Colors.blue.withOpacity(0.1),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Bagian Gambar / Ikon
+                // --- BAGIAN GAMBAR / IKON (BASE64 SUPPORT) ---
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
                       color: isOOS ? Colors.grey.shade300 : Colors.blue.shade50,
+                      // Logika Gambar Base64: Tampilkan jika ada (tak peduli stok)
+                      image: (imageProvider != null)
+                          ? DecorationImage(
+                              image: imageProvider, // Gunakan MemoryImage hasil decode
+                              fit: BoxFit.cover,
+                              // Efek Grayscale jika Habis
+                              colorFilter: isOOS
+                                  ? const ColorFilter.mode(
+                                      Colors.grey, BlendMode.saturation)
+                                  : null,
+                            )
+                          : null,
                     ),
                     child: Center(
                       child: isOOS
-                          ? const Text(
-                              "HABIS",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                "HABIS",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
                               ),
                             )
-                          : Icon(
-                              Icons.inventory_2,
-                              size: 40,
-                              color: Colors.blue.shade300,
-                            ),
+                          // Ikon hanya muncul jika TIDAK ADA GAMBAR
+                          : (imageProvider == null
+                              ? Icon(
+                                  Icons.inventory_2,
+                                  size: 40,
+                                  color: Colors.blue.shade300,
+                                )
+                              : null),
                     ),
                   ),
                 ),
-                // Bagian Teks
+                // --- BAGIAN TEKS ---
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: Column(
@@ -367,7 +398,7 @@ class _PosPageState extends State<PosPage> {
                                 ),
                                 onPressed: () => _addToCart(
                                   item.product,
-                                ), // Pakai fungsi add yang sama
+                                ),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),

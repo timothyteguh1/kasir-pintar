@@ -21,7 +21,10 @@ class _SupplierPageState extends State<SupplierPage> {
 
   void _refreshData() {
     setState(() {
-      _dataFuture = FirebaseFirestore.instance.collection('suppliers').orderBy('name').get();
+      _dataFuture = FirebaseFirestore.instance
+          .collection('suppliers')
+          .orderBy('name')
+          .get();
     });
   }
 
@@ -30,7 +33,7 @@ class _SupplierPageState extends State<SupplierPage> {
     final nameCtrl = TextEditingController(text: currentName ?? '');
     final phoneCtrl = TextEditingController(text: currentPhone ?? '');
     final bool isEditing = id != null;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -38,35 +41,76 @@ class _SupplierPageState extends State<SupplierPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(hintText: "Nama PT / Toko")),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(hintText: "Nama PT / Toko"),
+            ),
             const SizedBox(height: 10),
-            TextField(controller: phoneCtrl, decoration: const InputDecoration(hintText: "No. HP / Telp"), keyboardType: TextInputType.phone),
+            TextField(
+              controller: phoneCtrl,
+              decoration: const InputDecoration(hintText: "No. HP / Telp"),
+              keyboardType: TextInputType.phone,
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Batal"),
+          ),
           ElevatedButton(
             onPressed: () async {
               if (nameCtrl.text.isNotEmpty) {
-                Navigator.pop(context);
-                
-                if (isEditing) {
-                  // UPDATE
-                  await FirebaseFirestore.instance.collection('suppliers').doc(id).update({
-                    'name': nameCtrl.text,
-                    'phone': phoneCtrl.text,
-                  });
-                } else {
-                  // CREATE
-                  await FirebaseFirestore.instance.collection('suppliers').add({
-                    'name': nameCtrl.text,
-                    'phone': phoneCtrl.text,
-                    'created_at': DateTime.now(),
-                  });
-                }
+                // HAPUS Navigator.pop(context) DARI SINI
 
-                _refreshData();
-                if (mounted) showTopSnackBar(Overlay.of(context), CustomSnackBar.success(message: isEditing ? "Supplier Diupdate" : "Supplier Disimpan"));
+                // Tampilkan loading (opsional) atau biarkan user menunggu sebentar
+
+                try {
+                  if (isEditing) {
+                    // UPDATE
+                    await FirebaseFirestore.instance
+                        .collection('suppliers')
+                        .doc(id)
+                        .update({
+                          'name': nameCtrl.text,
+                          'phone': phoneCtrl.text,
+                        });
+                  } else {
+                    // CREATE
+                    await FirebaseFirestore.instance
+                        .collection('suppliers')
+                        .add({
+                          'name': nameCtrl.text,
+                          'phone': phoneCtrl.text,
+                          'created_at': DateTime.now(),
+                        });
+                  }
+
+                  _refreshData();
+
+                  // Cek mounted sebelum menggunakan context setelah await
+                  if (mounted) {
+                    showTopSnackBar(
+                      Overlay.of(context),
+                      CustomSnackBar.success(
+                        message: isEditing
+                            ? "Berhasil diupdate"
+                            : "Berhasil disimpan",
+                      ),
+                    );
+
+                    // PINDAHKAN Navigator.pop KE SINI (Setelah selesai semua)
+                    Navigator.pop(context);
+                  }
+                } catch (e) {
+                  // Handle error jika ada
+                  if (mounted) {
+                    showTopSnackBar(
+                      Overlay.of(context),
+                      CustomSnackBar.error(message: "Gagal: $e"),
+                    );
+                  }
+                }
               }
             },
             child: Text(isEditing ? "Update" : "Simpan"),
@@ -83,17 +127,27 @@ class _SupplierPageState extends State<SupplierPage> {
         title: const Text("Hapus?"),
         content: const Text("Yakin hapus supplier ini?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Batal"),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              FirebaseFirestore.instance.collection('suppliers').doc(id).delete().then((_) {
-                _refreshData();
-                showTopSnackBar(Overlay.of(context), const CustomSnackBar.success(message: "Dihapus"));
-              });
+              FirebaseFirestore.instance
+                  .collection('suppliers')
+                  .doc(id)
+                  .delete()
+                  .then((_) {
+                    _refreshData();
+                    showTopSnackBar(
+                      Overlay.of(context),
+                      const CustomSnackBar.success(message: "Dihapus"),
+                    );
+                  });
             },
             child: const Text("Hapus", style: TextStyle(color: Colors.red)),
-          )
+          ),
         ],
       ),
     );
@@ -111,23 +165,35 @@ class _SupplierPageState extends State<SupplierPage> {
       body: FutureBuilder<QuerySnapshot>(
         future: _dataFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("Belum ada supplier"));
+          if (snapshot.connectionState == ConnectionState.waiting)
+            return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+            return const Center(child: Text("Belum ada supplier"));
 
           return ListView.builder(
             itemCount: snapshot.data!.docs.length,
             itemBuilder: (context, index) {
               final data = snapshot.data!.docs[index];
               return ListTile(
-                leading: CircleAvatar(backgroundColor: Colors.green.shade50, child: const Icon(Icons.local_shipping, color: Colors.green)),
-                title: Text(data['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                leading: CircleAvatar(
+                  backgroundColor: Colors.green.shade50,
+                  child: const Icon(Icons.local_shipping, color: Colors.green),
+                ),
+                title: Text(
+                  data['name'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: Text(data['phone'] ?? '-'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.edit, color: Colors.orange),
-                      onPressed: () => showFormDialog(id: data.id, currentName: data['name'], currentPhone: data['phone']),
+                      onPressed: () => showFormDialog(
+                        id: data.id,
+                        currentName: data['name'],
+                        currentPhone: data['phone'],
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
