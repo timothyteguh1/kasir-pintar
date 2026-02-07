@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:kasir_pintar_toti/features/reports/sales_transaction_page.dart';
+import 'package:kasir_pintar_toti/features/reports/product_sales_page.dart';
+import 'package:kasir_pintar_toti/features/reports/profit_loss_page.dart';
+import 'package:kasir_pintar_toti/features/inventory/purchase_history_page.dart';
+import 'package:kasir_pintar_toti/features/member/customer_deposit_page.dart';
 
 class SalesReportPage extends StatelessWidget {
   final VoidCallback onBack;
@@ -11,7 +15,10 @@ class SalesReportPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[100], // Kembali ke warna tema project
       appBar: AppBar(
-        title: const Text("Menu Laporan", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Menu Laporan",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black, // Teks hitam agar bersih
         elevation: 0,
@@ -46,10 +53,16 @@ class SalesReportPage extends StatelessWidget {
             icon: Icons.pie_chart,
             color: Colors.orange,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Segera Hadir: Laporan Produk")));
+              // SEKARANG SUDAH ADA HALAMANNYA
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProductSalesPage(),
+                ),
+              );
             },
           ),
-          
+
           const SizedBox(height: 16),
 
           // 2. RIWAYAT TRANSAKSI (Sudah Jadi)
@@ -62,7 +75,9 @@ class SalesReportPage extends StatelessWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SalesTransactionPage()),
+                MaterialPageRoute(
+                  builder: (context) => const SalesTransactionPage(),
+                ),
               );
             },
           ),
@@ -77,12 +92,16 @@ class SalesReportPage extends StatelessWidget {
             icon: Icons.account_balance_wallet,
             color: Colors.green,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Segera Hadir: Laba Rugi")));
+              // --- NAVIGASI KE SINI ---
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfitLossPage()),
+              );
             },
           ),
 
           const SizedBox(height: 24),
-          
+
           // Header Section 2
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 10),
@@ -98,17 +117,25 @@ class SalesReportPage extends StatelessWidget {
           ),
 
           // 4. STOK MASUK
+          // Di dalam build() -> ListView -> _buildReportCard("Pembelian Stok") ...
           _buildReportCard(
             context,
             title: "Pembelian Stok",
-            subtitle: "Catat barang masuk (Kulakan)",
+            subtitle: "Catat barang masuk dari supplier",
             icon: Icons.inventory,
             color: Colors.purple,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Segera Hadir: Stok")));
+              // --- ARAHKAN KE HALAMAN HISTORY ---
+              Navigator.push(
+                context,
+                // Ganti StockPurchasePage() jadi PurchaseHistoryPage()
+                MaterialPageRoute(
+                  builder: (context) => const PurchaseHistoryPage(),
+                ),
+              );
             },
           ),
-          
+
           const SizedBox(height: 16),
 
           // 5. DEPOSIT
@@ -116,10 +143,16 @@ class SalesReportPage extends StatelessWidget {
             context,
             title: "Deposit Pelanggan",
             subtitle: "Kelola saldo simpanan member",
-            icon: Icons.savings,
+            icon: Icons.savings, // atau Icons.account_balance_wallet
             color: Colors.teal,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Segera Hadir: Deposit")));
+              // --- NAVIGASI KE SINI ---
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CustomerDepositPage(),
+                ),
+              );
             },
           ),
         ],
@@ -127,7 +160,8 @@ class SalesReportPage extends StatelessWidget {
     );
   }
 
-  Widget _buildReportCard(BuildContext context, {
+  Widget _buildReportCard(
+    BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
@@ -137,7 +171,9 @@ class SalesReportPage extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16), // Sudut melengkung khas project kita
+        borderRadius: BorderRadius.circular(
+          16,
+        ), // Sudut melengkung khas project kita
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.05), // Shadow halus
@@ -164,9 +200,9 @@ class SalesReportPage extends StatelessWidget {
                   ),
                   child: Icon(icon, color: color, size: 28),
                 ),
-                
+
                 const SizedBox(width: 16),
-                
+
                 // Teks Judul & Subjudul
                 Expanded(
                   child: Column(
@@ -175,7 +211,7 @@ class SalesReportPage extends StatelessWidget {
                       Text(
                         title,
                         style: const TextStyle(
-                          fontWeight: FontWeight.bold, 
+                          fontWeight: FontWeight.bold,
                           fontSize: 16,
                           color: Colors.black87,
                         ),
@@ -188,9 +224,13 @@ class SalesReportPage extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Panah Kanan
-                Icon(Icons.chevron_right_rounded, color: Colors.grey[300], size: 30),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: Colors.grey[300],
+                  size: 30,
+                ),
               ],
             ),
           ),

@@ -3,9 +3,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart'; // Import format tanggal Indo
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:kasir_pintar_toti/models/cart_model.dart';
-import 'package:kasir_pintar_toti/features/pos/invoice_page.dart'; // Import Invoice Page
+import 'package:kasir_pintar_toti/features/pos/invoice_page.dart';
 import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
 
@@ -32,6 +32,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String paymentMethod = "Cash"; 
   List<Map<String, dynamic>> customers = [];
   
+  // --- TAMBAHAN: Variabel Saldo Deposit ---
+  int customerDepositBalance = 0;
+
   String? selectedNonCashType;
   final List<String> nonCashOptions = [
     'QRIS', 'Transfer BCA', 'Transfer Mandiri', 'Transfer BRI', 'EDC BCA', 'GoPay', 'OVO', 'Dana'
@@ -47,7 +50,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   @override
   void initState() {
     super.initState();
-    initializeDateFormatting('id_ID', null); // Inisialisasi format tanggal Indo
+    initializeDateFormatting('id_ID', null); 
     _fetchCustomers();
     
     selectedStartDate = DateTime.now();
@@ -74,8 +77,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
         customers = snap.docs.map((doc) => {
           'id': doc.id,
           'name': doc['name'],
+          // --- TAMBAHAN: Ambil Saldo Deposit ---
+          'deposit_balance': doc.data().containsKey('deposit_balance') ? doc['deposit_balance'] : 0,
         }).toList();
-        customers.insert(0, {'id': 'walk-in', 'name': 'Walk-In Customer (Umum)'});
+        
+        // Walk-in customer saldonya 0
+        customers.insert(0, {'id': 'walk-in', 'name': 'Walk-In Customer (Umum)', 'deposit_balance': 0});
       });
     } catch (e) {
       debugPrint("Gagal ambil pelanggan: $e");
@@ -95,7 +102,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const Text("Masukkan PIN untuk memberi diskon."),
             const SizedBox(height: 10),
             TextField(
-              obscureText: true, // Sembunyikan angka
+              obscureText: true, 
               keyboardType: TextInputType.number,
               maxLength: 6,
               textAlign: TextAlign.center,
@@ -108,12 +115,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text("Batal")),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(dialogContext); // Tutup Dialog PIN
+              Navigator.pop(dialogContext); 
               if (inputPin == "123456") {
-                // JIKA PIN BENAR: Buka Dialog Input Diskon
                 _showDiscountInputDialog();
               } else {
-                // JIKA PIN SALAH
                 if (mounted) showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "PIN Salah! Akses Ditolak."));
               }
             },
@@ -133,11 +138,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(prefixText: "Rp ", hintText: "0"),
           onChanged: (val) {
-            // Update state di halaman induk
             setState(() {
               discount = int.tryParse(val.replaceAll('.', '')) ?? 0;
-              discountController.text = discount.toString(); // Update tampilan textfield read-only
-              _updatePayAmount(); // Recalculate total bayar
+              discountController.text = discount.toString(); 
+              _updatePayAmount(); 
             });
           },
         ),
@@ -240,6 +244,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 final ref = await FirebaseFirestore.instance.collection('customers').add({
                   'name': nameCtrl.text,
                   'phone': phoneCtrl.text,
+                  'deposit_balance': 0, // Customer baru saldo 0
                   'created_at': DateTime.now(),
                 });
                 await _fetchCustomers();
@@ -248,6 +253,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 setState(() {
                   selectedCustomerId = ref.id;
                   selectedCustomerName = nameCtrl.text;
+                  customerDepositBalance = 0; // Set saldo 0
                 });
 
                 if (mounted) showTopSnackBar(Overlay.of(context), const CustomSnackBar.success(message: "Pelanggan Baru Dipilih!"));
@@ -285,7 +291,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return;
     }
 
-    // 2. Validasi Hutang
+    // --- 2. Validasi Deposit ---
+    if (paymentMethod == "Deposit") {
+      if (selectedCustomerId == 'walk-in' || selectedCustomerId == null) {
+        showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "Pembayaran Deposit wajib pilih Pelanggan terdaftar!"));
+        return;
+      }
+      if (customerDepositBalance < grandTotal) {
+        showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "Saldo Deposit tidak mencukupi!"));
+        return;
+      }
+    }
+
+    // 3. Validasi Hutang
     if (paymentMethod == "Hutang") {
       if (selectedCustomerId == 'walk-in' || selectedCustomerId == null) {
         showTopSnackBar(Overlay.of(context), const CustomSnackBar.error(message: "Hutang wajib pilih Pelanggan terdaftar!"));
@@ -305,7 +323,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
     }
 
-    // 3. Validasi Tanggal
+    // 4. Validasi Tanggal
     if (selectedEndDate != null && selectedStartDate != null) {
       DateTime start = DateTime(selectedStartDate!.year, selectedStartDate!.month, selectedStartDate!.day);
       DateTime end = DateTime(selectedEndDate!.year, selectedEndDate!.month, selectedEndDate!.day);
@@ -321,11 +339,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
     try {
       final batch = FirebaseFirestore.instance.batch();
       final transactionRef = FirebaseFirestore.instance.collection('transactions').doc();
+      final now = DateTime.now();
       
-      // SIAPKAN DATA (Ini yang nanti kita kirim balik ke PosPage)
+      // SIAPKAN DATA
       final transactionData = {
-        'invoice_no': "INV-${DateTime.now().millisecondsSinceEpoch}",
-        'date': Timestamp.now(),
+        'invoice_no': "INV-${now.millisecondsSinceEpoch}",
+        'date': Timestamp.fromDate(now),
         'start_date': selectedStartDate != null ? Timestamp.fromDate(selectedStartDate!) : null,
         'end_date': selectedEndDate != null ? Timestamp.fromDate(selectedEndDate!) : null,
         'due_date': selectedDueDate != null ? Timestamp.fromDate(selectedDueDate!) : null,
@@ -350,13 +369,34 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'remaining_debt': paymentMethod == "Hutang" ? (grandTotal - payAmount) : 0,
       };
 
-      // Simpan ke Database
+      // Simpan ke Database Transaksi
       batch.set(transactionRef, transactionData);
 
+      // Update Stok Produk
       for (var item in widget.cartItems) {
         final productRef = FirebaseFirestore.instance.collection('products').doc(item.product.id);
         batch.update(productRef, {
           'stock': FieldValue.increment(-item.qty),
+        });
+      }
+
+      // --- LOGIKA POTONG SALDO DEPOSIT ---
+      if (paymentMethod == "Deposit" && selectedCustomerId != null) {
+        // 1. Kurangi Saldo di Data Customer
+        final customerRef = FirebaseFirestore.instance.collection('customers').doc(selectedCustomerId);
+        batch.update(customerRef, {
+          'deposit_balance': FieldValue.increment(-grandTotal),
+        });
+
+        // 2. Catat di Riwayat Deposit
+        final depositHistoryRef = FirebaseFirestore.instance.collection('deposit_history').doc();
+        batch.set(depositHistoryRef, {
+          'customer_id': selectedCustomerId,
+          'customer_name': selectedCustomerName,
+          'type': 'out', // Keluar (Dipakai Belanja)
+          'amount': grandTotal,
+          'date': Timestamp.fromDate(now),
+          'note': 'Pembayaran Invoice ${transactionData['invoice_no']}',
         });
       }
 
@@ -365,7 +405,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       if (mounted) {
         Navigator.pop(context); // 1. Tutup Loading
         
-        // 2. PERUBAHAN UTAMA: Kirim Data Balik ke PosPage (Bukan buka Invoice di sini)
+        // 2. Kirim Data Balik ke PosPage
         Navigator.pop(context, transactionData); 
       }
 
@@ -393,12 +433,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
         child: ElevatedButton(
           onPressed: _processTransaction,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
+            backgroundColor: paymentMethod == "Hutang" ? Colors.orange : (paymentMethod == "Deposit" ? Colors.teal : Colors.blue),
             padding: const EdgeInsets.symmetric(vertical: 15),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           child: Text(
-            paymentMethod == "Hutang" ? "SIMPAN TAGIHAN" : "BAYAR ${formatRupiah(grandTotal)}",
+            paymentMethod == "Hutang" ? "SIMPAN TAGIHAN" : (paymentMethod == "Deposit" ? "BAYAR PAKAI DEPOSIT" : "BAYAR ${formatRupiah(grandTotal)}"),
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
@@ -458,18 +498,38 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   items: customers.map((c) {
                     return DropdownMenuItem<String>(
                       value: c['id'],
-                      child: Text(c['name']),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(c['name']),
+                          // Tampilkan Saldo jika bukan Walk-in
+                          if (c['id'] != 'walk-in')
+                             Text(formatRupiah(c['deposit_balance'] ?? 0), style: TextStyle(fontSize: 12, color: Colors.green[700], fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     );
                   }).toList(),
                   onChanged: (val) {
                     setState(() {
                       selectedCustomerId = val;
-                      selectedCustomerName = customers.firstWhere((c) => c['id'] == val)['name'];
+                      var selected = customers.firstWhere((c) => c['id'] == val);
+                      selectedCustomerName = selected['name'];
+                      // Update saldo
+                      customerDepositBalance = selected['deposit_balance'] ?? 0;
                     });
                   },
                 ),
               ),
             ),
+            // Info Saldo di Bawah Dropdown
+            if (selectedCustomerId != null && selectedCustomerId != 'walk-in')
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  "Saldo Deposit: ${formatRupiah(customerDepositBalance)}", 
+                  style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
             if (paymentMethod == "Hutang" && selectedCustomerId == 'walk-in')
               const Padding(
                 padding: EdgeInsets.only(top: 4),
@@ -550,7 +610,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             hintText: "0",
                             border: InputBorder.none,
                             hintStyle: TextStyle(color: Colors.redAccent),
-                            suffixIcon: Icon(Icons.lock, size: 14, color: Colors.grey), // Ikon Gembok
+                            suffixIcon: Icon(Icons.lock, size: 14, color: Colors.grey),
                           ),
                         ),
                       ),
@@ -585,6 +645,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 const SizedBox(width: 10),
                 _buildPaymentOption("Hutang", Icons.book),
               ],
+            ),
+            const SizedBox(height: 8),
+            // Row ke-2 untuk Deposit (biar rapi)
+            Row(
+               children: [
+                 _buildPaymentOption("Deposit", Icons.account_balance_wallet),
+                 const Spacer(), // Biarkan kosong di kanan
+                 const Spacer(),
+               ],
             ),
 
             const SizedBox(height: 20),
@@ -659,43 +728,71 @@ class _CheckoutPageState extends State<CheckoutPage> {
               const SizedBox(height: 12),
             ],
 
-            const Text("Total Bayar / Diterima / DP", style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: payAmountController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                hintText: "Masukkan nominal...",
-                filled: true, fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                prefixText: "Rp ",
+            // Input Uang (Sembunyikan kalau bayar pakai Deposit atau Hutang)
+            if (paymentMethod != "Hutang" && paymentMethod != "Deposit") ...[
+              const Text("Total Bayar / Diterima / DP", style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: payAmountController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  hintText: "Masukkan nominal...",
+                  filled: true, fillColor: Colors.white,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  prefixText: "Rp ",
+                ),
+                onChanged: (val) {
+                  setState(() {
+                    payAmount = int.tryParse(val.replaceAll('.', '')) ?? 0;
+                  });
+                },
               ),
-              onChanged: (val) {
-                setState(() {
-                  payAmount = int.tryParse(val.replaceAll('.', '')) ?? 0;
-                });
-              },
-            ),
-            
-            if (paymentMethod == "Cash") ...[
+              
+              if (paymentMethod == "Cash") ...[
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildQuickMoneyButton(grandTotal), 
+                      _buildQuickMoneyButton(10000),
+                      _buildQuickMoneyButton(20000),
+                      _buildQuickMoneyButton(50000),
+                      _buildQuickMoneyButton(100000),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+            ],
+            
+            // Tampilan Khusus Deposit
+            if (paymentMethod == "Deposit") 
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.teal)),
+                child: Column(
                   children: [
-                    _buildQuickMoneyButton(grandTotal), 
-                    _buildQuickMoneyButton(10000),
-                    _buildQuickMoneyButton(20000),
-                    _buildQuickMoneyButton(50000),
-                    _buildQuickMoneyButton(100000),
+                    const Text("Pembayaran via Saldo Deposit", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 5),
+                    Text(
+                      "Saldo Tersedia: ${formatRupiah(customerDepositBalance)}", 
+                      style: TextStyle(
+                        fontSize: 16, 
+                        fontWeight: FontWeight.bold,
+                        color: customerDepositBalance >= grandTotal ? Colors.teal : Colors.red
+                      )
+                    ),
+                    if (customerDepositBalance < grandTotal)
+                      const Text("(Saldo Kurang!)", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
-            ],
 
-            const SizedBox(height: 10),
-            
+            // Sisa / Kembalian
             if (paymentMethod == "Hutang")
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -704,7 +801,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   Text(formatRupiah(grandTotal - payAmount), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
                 ],
               )
-            else if (payAmount > 0)
+            else if (payAmount > 0 && paymentMethod != "Deposit")
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -734,6 +831,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               payAmount = 0;
               payAmountController.text = "0";
             } else {
+              // Cash, Non-Cash, Deposit semua otomatis set ke Grand Total
               payAmount = grandTotal;
               payAmountController.text = grandTotal.toString();
             }
