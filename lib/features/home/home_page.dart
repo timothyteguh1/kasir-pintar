@@ -14,6 +14,8 @@ import 'package:top_snackbar_flutter/custom_snack_bar.dart';
 import 'package:top_snackbar_flutter/top_snack_bar.dart';
 import 'package:kasir_pintar_toti/features/master/master_data_page.dart';
 import 'package:kasir_pintar_toti/features/pos/pos_page.dart';
+import 'package:kasir_pintar_toti/features/reports/sales_transaction_page.dart'; // Untuk Riwayat
+import 'package:kasir_pintar_toti/features/customers/customer_page.dart'; // Untuk Pelanggan
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -495,8 +497,24 @@ class _HomePageState extends State<HomePage> {
                       );
                     });
                   }),
-                  _buildMenuItem("Riwayat", Icons.history, Colors.green, () {}),
-                  _buildMenuItem("Pelanggan", Icons.people, Colors.teal, () {}),
+                  _buildMenuItem("Riwayat", Icons.history, Colors.green, () {
+                    setState(() {
+                      _activePage = SalesTransactionPage(
+                        // Kita oper fungsi untuk mereset halaman kembali ke dashboard
+                        onBack: () => setState(() => _activePage = null),
+                      );
+                    });
+                  }),
+
+                  // 3. PELANGGAN (Ganti ke setState)
+                  _buildMenuItem("Pelanggan", Icons.people, Colors.teal, () {
+                    setState(() {
+                      _activePage = CustomerPage(
+                        // Kita oper fungsi untuk mereset halaman kembali ke dashboard
+                        onBack: () => setState(() => _activePage = null),
+                      );
+                    });
+                  }),
                   _buildMenuItem(
                     "Pengeluaran",
                     Icons.money_off,

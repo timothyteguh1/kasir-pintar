@@ -4,18 +4,20 @@ import 'package:intl/intl.dart';
 import 'package:kasir_pintar_toti/features/pos/invoice_page.dart';
 
 class SalesTransactionPage extends StatefulWidget {
-  const SalesTransactionPage({super.key});
+  // 1. Add the onBack callback parameter
+  final VoidCallback? onBack;
+
+  const SalesTransactionPage({super.key, this.onBack});
 
   @override
   State<SalesTransactionPage> createState() => _SalesTransactionPageState();
 }
 
 class _SalesTransactionPageState extends State<SalesTransactionPage> {
-  // Variabel untuk menyimpan data
-  List<DocumentSnapshot> _allTransactions = []; // Data mentah (Semua)
-  List<DocumentSnapshot> _filteredTransactions = []; // Data hasil search
+  // ... (Previous variables: _allTransactions, _filteredTransactions, _isLoading, _searchController) ...
+  List<DocumentSnapshot> _allTransactions = [];
+  List<DocumentSnapshot> _filteredTransactions = [];
   bool _isLoading = true;
-  
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -24,19 +26,19 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
     _fetchData();
   }
 
-  // 1. AMBIL DATA DARI FIRESTORE
+  // ... (Previous functions: _fetchData, _runSearch, formatRupiah, getGroupDate) ...
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('transactions')
           .orderBy('date', descending: true)
-          .limit(100) // Batasi 100 terakhir agar ringan
+          .limit(100)
           .get();
 
       setState(() {
         _allTransactions = snapshot.docs;
-        _filteredTransactions = snapshot.docs; // Awalnya tampilkan semua
+        _filteredTransactions = snapshot.docs;
         _isLoading = false;
       });
     } catch (e) {
@@ -45,30 +47,22 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
     }
   }
 
-  // 2. LOGIKA PENCARIAN (INVOICE / NAMA)
   void _runSearch(String query) {
     if (query.isEmpty) {
-      // Kalau kosong, kembalikan ke list penuh
       setState(() => _filteredTransactions = _allTransactions);
       return;
     }
-
     final lowerQuery = query.toLowerCase();
-
     setState(() {
       _filteredTransactions = _allTransactions.where((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        
         final invoice = (data['invoice_no'] ?? '').toString().toLowerCase();
         final customer = (data['customer_name'] ?? '').toString().toLowerCase();
-
-        // Cek apakah invoice ATAU nama mengandung kata kunci
         return invoice.contains(lowerQuery) || customer.contains(lowerQuery);
       }).toList();
     });
   }
 
-  // Fungsi Format
   String formatRupiah(num number) {
     return NumberFormat.currency(
       locale: 'id_ID',
@@ -98,6 +92,12 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
         foregroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
+        // 2. Use the onBack callback in the leading button
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          // Logic: If onBack is provided (from HomePage), use it. Otherwise, use standard pop.
+          onPressed: widget.onBack ?? () => Navigator.pop(context),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.blue),
@@ -110,13 +110,13 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
       ),
       body: Column(
         children: [
-          // --- SEARCH BAR ---
+          // ... (Rest of the body code: Search Bar, List Transactions) ...
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.white,
             child: TextField(
               controller: _searchController,
-              onChanged: _runSearch, // Panggil fungsi cari saat ketik
+              onChanged: _runSearch,
               decoration: InputDecoration(
                 hintText: "Cari Invoice atau Pelanggan...",
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -132,15 +132,13 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
                         icon: const Icon(Icons.clear, color: Colors.grey),
                         onPressed: () {
                           _searchController.clear();
-                          _runSearch(''); // Reset search
+                          _runSearch('');
                         },
                       )
                     : null,
               ),
             ),
           ),
-
-          // --- LIST TRANSAKSI ---
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -162,32 +160,27 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
     );
   }
 
-  // Fungsi untuk menyusun List Grouping
+  // ... (Helper functions: _buildGroupedList, _buildDateSection, _buildTransactionItem) ...
+  // Paste the rest of your existing helper functions here exactly as they were
+  
   Widget _buildGroupedList() {
-    // 1. Grouping Data
     Map<String, List<DocumentSnapshot>> groupedData = {};
-    
     for (var doc in _filteredTransactions) {
       final data = doc.data() as Map<String, dynamic>;
       if (data['date'] == null) continue;
-      
       final date = (data['date'] as Timestamp).toDate();
       String groupKey = getGroupDate(date);
-
       if (groupedData[groupKey] == null) {
         groupedData[groupKey] = [];
       }
       groupedData[groupKey]!.add(doc);
     }
-
-    // 2. Tampilkan List
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: groupedData.keys.length,
       itemBuilder: (context, index) {
         String dateKey = groupedData.keys.elementAt(index);
         List<DocumentSnapshot> transactions = groupedData[dateKey]!;
-
         return _buildDateSection(dateKey, transactions);
       },
     );
@@ -226,7 +219,6 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
               final doc = transactions[index];
               final data = doc.data() as Map<String, dynamic>;
               final isLastItem = index == transactions.length - 1;
-
               return Column(
                 children: [
                   _buildTransactionItem(data),
@@ -251,7 +243,6 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
   Widget _buildTransactionItem(Map<String, dynamic> data) {
     final date = (data['date'] as Timestamp).toDate();
     final bool isPaid = data['is_paid'] ?? true;
-
     return InkWell(
       onTap: () {
         Navigator.push(
@@ -307,7 +298,6 @@ class _SalesTransactionPageState extends State<SalesTransactionPage> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // HIGHLIGHT SEARCH TEXT (Optional logic, but clean UI)
                   Text(
                     "${DateFormat('HH:mm').format(date)} • ${data['invoice_no'] ?? '-'}",
                     style: TextStyle(color: Colors.grey[500], fontSize: 12),
