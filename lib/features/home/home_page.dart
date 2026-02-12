@@ -16,6 +16,7 @@ import 'package:kasir_pintar_toti/features/master/master_data_page.dart';
 import 'package:kasir_pintar_toti/features/pos/pos_page.dart';
 import 'package:kasir_pintar_toti/features/reports/sales_transaction_page.dart'; // Untuk Riwayat
 import 'package:kasir_pintar_toti/features/customers/customer_page.dart'; // Untuk Pelanggan
+import 'package:kasir_pintar_toti/features/expenses/expenses_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,9 +28,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final user = FirebaseAuth.instance.currentUser;
 
-  // --- STATE HALAMAN AKTIF (SOLUSI CRASH WINDOWS) ---
-  // Jika null = Tampilkan Dashboard (Home)
-  // Jika isi widget = Tampilkan Halaman tersebut (misal: ProductListPage)
+  // --- STATE HALAMAN AKTIF ---
   Widget? _activePage;
 
   // --- STATE UNTUK FOTO PROFIL ---
@@ -61,7 +60,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 2. FUNGSI UPLOAD FOTO (Kompres & Simpan ke Database)
+  // 2. FUNGSI UPLOAD FOTO
   Future<void> changeProfilePicture() async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(
@@ -178,9 +177,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // --- LOGIKA UTAMA: CEK APAKAH ADA HALAMAN AKTIF? ---
-    // Kalau _activePage ada isinya (misal Halaman Produk), tampilkan itu.
-    // Kalau null, tampilkan Dashboard di bawah ini.
+    // --- LOGIKA UTAMA: TAMPILKAN HALAMAN AKTIF ---
     if (_activePage != null) {
       return _activePage!;
     }
@@ -478,7 +475,6 @@ class _HomePageState extends State<HomePage> {
                     Icons.inventory_2,
                     Colors.orange,
                     () {
-                      // --- NAVIGASI BARU: Ke MasterDataPage ---
                       setState(() {
                         _activePage = MasterDataPage(
                           onBack: () {
@@ -488,29 +484,30 @@ class _HomePageState extends State<HomePage> {
                       });
                     },
                   ),
-                  _buildMenuItem("Laporan", Icons.bar_chart, Colors.purple, () {
-                    setState(() {
-                      _activePage = SalesReportPage(
-                        onBack: () {
-                          setState(() => _activePage = null);
-                        },
-                      );
-                    });
-                  }),
+                  _buildMenuItem(
+                    "Laporan",
+                    Icons.bar_chart,
+                    Colors.purple,
+                    () {
+                      setState(() {
+                        _activePage = SalesReportPage(
+                          onBack: () {
+                            setState(() => _activePage = null);
+                          },
+                        );
+                      });
+                    },
+                  ),
                   _buildMenuItem("Riwayat", Icons.history, Colors.green, () {
                     setState(() {
                       _activePage = SalesTransactionPage(
-                        // Kita oper fungsi untuk mereset halaman kembali ke dashboard
                         onBack: () => setState(() => _activePage = null),
                       );
                     });
                   }),
-
-                  // 3. PELANGGAN (Ganti ke setState)
                   _buildMenuItem("Pelanggan", Icons.people, Colors.teal, () {
                     setState(() {
                       _activePage = CustomerPage(
-                        // Kita oper fungsi untuk mereset halaman kembali ke dashboard
                         onBack: () => setState(() => _activePage = null),
                       );
                     });
@@ -519,7 +516,13 @@ class _HomePageState extends State<HomePage> {
                     "Pengeluaran",
                     Icons.money_off,
                     Colors.red,
-                    () {},
+                    () {
+                      setState(() {
+                        _activePage = ExpensesPage(
+                          onBack: () => setState(() => _activePage = null),
+                        );
+                      });
+                    },
                   ),
                   _buildMenuItem("Pegawai", Icons.badge, Colors.indigo, () {}),
                   _buildMenuItem("Setting", Icons.settings, Colors.grey, () {}),
@@ -530,11 +533,9 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
 
-      // BOTTOM NAVIGATION BAR
+      // --- [FIX] BOTTOM NAVIGATION BAR TANPA SHAPE ---
       bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8.0,
-        color: Colors.white,
+        color: Colors.white, // Hapus 'shape' notch di sini
         child: SizedBox(
           height: 60,
           child: Row(
@@ -562,15 +563,14 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
 
-      // TOMBOL TENGAH (POS)
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      // --- [FIX] FAB MELAYANG (MENCEGAH ERROR GEOMETRI) ---
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Masuk ke Halaman Kasir
           setState(() {
             _activePage = PosPage(
               onBack: () {
-                setState(() => _activePage = null); // Kembali ke Home
+                setState(() => _activePage = null);
               },
             );
           });
